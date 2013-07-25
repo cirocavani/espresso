@@ -1,7 +1,11 @@
+Server:
+
 	go run sample/http.go
 	2013/07/24 21:00:22 HTTP Server
 	2013/07/24 21:00:22 Threads: 8
 	2013/07/24 21:00:22 Address: 127.0.0.1:8080
+
+Benchmark:
 
 	wrk -t 15 -c 600 -d 20s http://127.0.0.1:8080/
 	Running 20s test @ http://127.0.0.1:8080/

@@ -10,9 +10,17 @@ import (
 var optThreads = flag.Int("threads", runtime.NumCPU(), "Max system threads (default number of CPUs)")
 var optBindAddress = flag.String("bind", "127.0.0.1:8080", "HTTP Server bind address (default 127.0.0.1:8080)")
 
+type Parameters map[string][]string
+
+func ParseRequestParameters(req *http.Request) *Parameters {
+	params := Parameters(req.URL.Query())
+	return &params
+}
+
 type HttpHandler struct{}
 
 func (*HttpHandler) ServeHTTP(out http.ResponseWriter, req *http.Request) {
+	ParseRequestParameters(req)
 	out.Write([]byte("That is it!\n"))
 }
 
