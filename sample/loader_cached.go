@@ -95,27 +95,37 @@ func NewDataLoader(load func(string) *DataContainer) *DataLoader {
 		result <- &DataResult{key, value}
 	}
 
-	go func() {
+	requestHandler := func(req *DataRequest) {
+		if pipe, ok := work[req.key]; ok {
+			pipe.PushBack(&req.reply)
+			return
+		}
+		pipe := list.New()
+		pipe.PushBack(&req.reply)
+		work[req.key] = pipe
+		go worker(req.key)
+	}
+
+	resultHandler := func(res *DataResult) {
+		pipe := work[res.key]
+		for i := pipe.Front(); i != nil; i = i.Next() {
+			*i.Value.(*DataPipe) <- res.value
+		}
+		delete(work, res.key)
+	}
+
+	broker := func() {
 		for {
 			select {
 			case req := <-request:
-				if pipe, ok := work[req.key]; ok {
-					pipe.PushBack(&req.reply)
-					continue
-				}
-				pipe := list.New()
-				pipe.PushBack(&req.reply)
-				work[req.key] = pipe
-				go worker(req.key)
+				requestHandler(req)
 			case res := <-result:
-				pipe := work[res.key]
-				for i := pipe.Front(); i != nil; i = i.Next() {
-					*i.Value.(*DataPipe) <- res.value
-				}
-				delete(work, res.key)
+				resultHandler(res)
 			}
 		}
-	}()
+	}
+
+	go broker()
 
 	return &DataLoader{
 		cache:   cache,
