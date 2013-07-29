@@ -7,7 +7,7 @@ import (
 	"log"
 )
 
-var size = flag.Int("size", 1, "Number of objects")
+var optSize = flag.Int("size", 1, "Number of objects")
 
 type Data struct {
 	Number int    `json:"number"`
@@ -73,15 +73,15 @@ func main() {
 	fmt.Println("JSON encode/decode")
 	flag.Parse()
 
-	fmt.Println("Size:", *size)
+	fmt.Println("Size:", *optSize)
 
 	fmt.Println("(Raw to Data)")
-	raw := raw(*size)
+	raw := raw(*optSize)
 	result1 := jsonParse(&raw)
 	fmt.Println(&result1)
 
 	fmt.Println("(Data to Raw)")
-	data := data(*size)
+	data := data(*optSize)
 	result2 := jsonRaw(&data)
 	fmt.Println(string(result2))
 }
