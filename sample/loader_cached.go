@@ -95,6 +95,12 @@ func NewDataLoader(load func(string) *DataContainer) *DataLoader {
 		result <- &DataResult{key, value}
 	}
 
+	dispatcher := func(value *DataContainer, pipe *list.List) {
+		for i := pipe.Front(); i != nil; i = i.Next() {
+			*i.Value.(*DataPipe) <- value
+		}
+	}
+
 	requestHandler := func(req *DataRequest) {
 		if pipe, ok := work[req.key]; ok {
 			pipe.PushBack(&req.reply)
@@ -108,10 +114,8 @@ func NewDataLoader(load func(string) *DataContainer) *DataLoader {
 
 	resultHandler := func(res *DataResult) {
 		pipe := work[res.key]
-		for i := pipe.Front(); i != nil; i = i.Next() {
-			*i.Value.(*DataPipe) <- res.value
-		}
 		delete(work, res.key)
+		go dispatcher(res.value, pipe)
 	}
 
 	broker := func() {
