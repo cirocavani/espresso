@@ -59,10 +59,12 @@ func (this *Cache) Set(key string, value interface{}) interface{} {
 	return value
 }
 
-func (this *Cache) Delete(key string) {
+func (this *Cache) Delete(keys ...string) {
 	this.Lock()
 	defer this.Unlock()
-	delete(this.data, key)
+	for _, key := range keys {
+		delete(this.data, key)
+	}
 }
 
 func main() {
