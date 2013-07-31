@@ -12,43 +12,18 @@ import (
 
 var optThreads = flag.Int("threads", runtime.NumCPU(), "Number of system threads")
 
-type Data struct {
-	value int
-}
-
-func (this *Data) String() string {
-	out := "{"
-	out += fmt.Sprintf("value: %d", this.value)
-	out += "}"
-	return out
-}
-
-type DataContainer []*Data
-
-func (this *DataContainer) String() string {
-	out := "["
-	for i, v := range *this {
-		if i != 0 {
-			out += ","
-		}
-		out += v.String()
-	}
-	out += "]"
-	return out
-}
-
 type Cache struct {
 	sync.RWMutex
-	data map[string]*DataContainer
+	data map[string]interface{}
 }
 
 func NewCache() *Cache {
 	return &Cache{
-		data: make(map[string]*DataContainer),
+		data: make(map[string]interface{}),
 	}
 }
 
-func (this *Cache) Get(key string) *DataContainer {
+func (this *Cache) Get(key string) interface{} {
 	this.RLock()
 	defer this.RUnlock()
 	value, ok := this.data[key]
@@ -59,14 +34,14 @@ func (this *Cache) Get(key string) *DataContainer {
 	return value
 }
 
-func (this *Cache) Set(key string, value *DataContainer) *DataContainer {
+func (this *Cache) Set(key string, value interface{}) interface{} {
 	this.Lock()
 	defer this.Unlock()
 	this.data[key] = value
 	return value
 }
 
-type DataPipe chan *DataContainer
+type DataPipe chan interface{}
 
 type DataRequest struct {
 	key   string
@@ -75,7 +50,7 @@ type DataRequest struct {
 
 type DataResult struct {
 	key   string
-	value *DataContainer
+	value interface{}
 }
 
 type DataLoader struct {
@@ -83,7 +58,7 @@ type DataLoader struct {
 	request chan *DataRequest
 }
 
-func NewDataLoader(load func(string) *DataContainer) *DataLoader {
+func NewDataLoader(load func(string) interface{}) *DataLoader {
 	cache := NewCache()
 	request := make(chan *DataRequest, 100)
 	result := make(chan *DataResult, 100)
@@ -95,7 +70,7 @@ func NewDataLoader(load func(string) *DataContainer) *DataLoader {
 		result <- &DataResult{key, value}
 	}
 
-	dispatcher := func(value *DataContainer, pipe *list.List) {
+	dispatcher := func(value interface{}, pipe *list.List) {
 		for i := pipe.Front(); i != nil; i = i.Next() {
 			*i.Value.(*DataPipe) <- value
 		}
@@ -143,7 +118,7 @@ func (this *DataLoader) load(key string) DataPipe {
 	return pipe
 }
 
-func (this *DataLoader) fetch(key string, timeout time.Duration) *DataContainer {
+func (this *DataLoader) fetch(key string, timeout time.Duration) interface{} {
 	pipe := this.load(key)
 
 	if timeout == 0 {
@@ -158,15 +133,21 @@ func (this *DataLoader) fetch(key string, timeout time.Duration) *DataContainer 
 	}
 }
 
-func (this *DataLoader) get(key string) *DataContainer {
+func (this *DataLoader) get(key string) interface{} {
 	return this.cache.Get(key)
 }
 
-func (this *DataLoader) Fetch(key string, timeout time.Duration) *DataContainer {
+func (this *DataLoader) Fetch(key string, timeout time.Duration) interface{} {
 	if value := this.get(key); value != nil {
 		return value
 	}
 	return this.fetch(key, timeout)
+}
+
+type Data string
+
+func (this *Data) String() string {
+	return string(*this)
 }
 
 func main() {
@@ -177,13 +158,11 @@ func main() {
 	fmt.Println("Threads:", *optThreads)
 	runtime.GOMAXPROCS(*optThreads)
 
-	loader := NewDataLoader(func(key string) *DataContainer {
+	loader := NewDataLoader(func(key string) interface{} {
 		log.Println("Loading:", key)
 		time.Sleep(5 * time.Second)
-		return &DataContainer{
-			&Data{1},
-			&Data{2},
-		}
+		data := Data("data that take too long to fetch")
+		return &data
 	})
 
 	timeout := 1 * time.Second
