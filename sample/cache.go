@@ -1,6 +1,7 @@
 package main
 
 import (
+	"container/list"
 	"flag"
 	"fmt"
 	"log"
@@ -38,19 +39,45 @@ type Cache struct {
 func NewCache(ttl time.Duration, size int) *Cache {
 	event := make(chan *Event, 100)
 
+	cache := &Cache{
+		data:  make(map[string]interface{}),
+		event: event,
+	}
+
 	eviction := func() {
+		type KeyInfo struct {
+			key        string
+			expiration time.Time
+		}
+		meta := list.New()
+		ticker := time.NewTicker(5 * time.Second)
+
 		for {
-			e := <-event
-			fmt.Println(e)
+			select {
+			case e := <-event:
+				fmt.Println(e)
+				if e.Type == DEL {
+					continue
+				}
+				meta.PushBack(&KeyInfo{e.Key, e.Timestamp.Add(ttl)})
+			case <-ticker.C:
+				keys := make([]string, 0, meta.Len())
+				now := time.Now()
+				for i := meta.Front(); i != nil; i = i.Next() {
+					if k := i.Value.(*KeyInfo); k.expiration.Before(now) {
+						keys = append(keys, k.key)
+					}
+				}
+				if len(keys) > 0 {
+					cache.Delete(keys...)
+				}
+			}
 		}
 	}
 
 	go eviction()
 
-	return &Cache{
-		data:  make(map[string]interface{}),
-		event: event,
-	}
+	return cache
 }
 
 func (this *Cache) String() string {
