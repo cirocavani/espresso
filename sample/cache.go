@@ -49,7 +49,7 @@ func NewCache(ttl time.Duration, size int) *Cache {
 			key        string
 			expiration time.Time
 		}
-		meta := list.New()
+		keys := list.New()
 		ticker := time.NewTicker(5 * time.Second)
 
 		for {
@@ -59,17 +59,24 @@ func NewCache(ttl time.Duration, size int) *Cache {
 				if e.Type == DEL {
 					continue
 				}
-				meta.PushBack(&KeyInfo{e.Key, e.Timestamp.Add(ttl)})
+				keys.PushBack(&KeyInfo{e.Key, e.Timestamp.Add(ttl)})
 			case <-ticker.C:
-				keys := make([]string, 0, meta.Len())
-				now := time.Now()
-				for i := meta.Front(); i != nil; i = i.Next() {
-					if k := i.Value.(*KeyInfo); k.expiration.Before(now) {
-						keys = append(keys, k.key)
-					}
+				if keys.Len() == 0 {
+					continue
 				}
-				if len(keys) > 0 {
-					cache.Delete(keys...)
+				purge := make([]string, 0, keys.Len())
+				now := time.Now()
+				for i := keys.Front(); i != nil; {
+					next := i.Next()
+					if k := i.Value.(*KeyInfo); k.expiration.Before(now) {
+						purge = append(purge, k.key)
+						keys.Remove(i)
+					}
+					i = next
+				}
+
+				if len(purge) > 0 {
+					go cache.Delete(purge...)
 				}
 			}
 		}
