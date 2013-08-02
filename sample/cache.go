@@ -32,7 +32,7 @@ func NewCache(ttl time.Duration, maxSize int) *Cache {
 	}
 
 	eviction := func() {
-		ticker := time.NewTicker(5 * time.Second)
+		ticker := time.NewTicker(ttl)
 
 		for {
 			<-ticker.C
