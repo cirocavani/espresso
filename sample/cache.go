@@ -12,73 +12,31 @@ import (
 
 var optThreads = flag.Int("threads", runtime.NumCPU(), "Number of system threads")
 
-type EventType int
-
-const (
-	SET EventType = iota
-	DEL
-)
-
-type Event struct {
-	Type      EventType
-	Key       string
-	Timestamp time.Time
-}
-
-func (this *Event) String() string {
-	return fmt.Sprintf("%v, %s, %v", this.Type, this.Key, this.Timestamp)
+type CacheValue struct {
+	Value      interface{}
+	expiration time.Time
 }
 
 type Cache struct {
 	sync.RWMutex
-	data map[string]interface{}
-
-	event chan *Event
+	data    map[string]*CacheValue
+	ttl     time.Duration
+	maxSize int
 }
 
-func NewCache(ttl time.Duration, size int) *Cache {
-	event := make(chan *Event, 100)
-
+func NewCache(ttl time.Duration, maxSize int) *Cache {
 	cache := &Cache{
-		data:  make(map[string]interface{}),
-		event: event,
+		data:    make(map[string]*CacheValue),
+		ttl:     ttl,
+		maxSize: maxSize,
 	}
 
 	eviction := func() {
-		type KeyInfo struct {
-			key        string
-			expiration time.Time
-		}
-		keys := list.New()
 		ticker := time.NewTicker(5 * time.Second)
 
 		for {
-			select {
-			case e := <-event:
-				fmt.Println(e)
-				if e.Type == DEL {
-					continue
-				}
-				keys.PushBack(&KeyInfo{e.Key, e.Timestamp.Add(ttl)})
-			case <-ticker.C:
-				if keys.Len() == 0 {
-					continue
-				}
-				purge := make([]string, 0, keys.Len())
-				now := time.Now()
-				for i := keys.Front(); i != nil; {
-					next := i.Next()
-					if k := i.Value.(*KeyInfo); k.expiration.Before(now) {
-						purge = append(purge, k.key)
-						keys.Remove(i)
-					}
-					i = next
-				}
-
-				if len(purge) > 0 {
-					go cache.Delete(purge...)
-				}
-			}
+			<-ticker.C
+			cache.Eviction()
 		}
 	}
 
@@ -106,38 +64,64 @@ func (this *Cache) String() string {
 	return out
 }
 
+func (this *Cache) keysOlderThan(t *time.Time) *list.List {
+	this.RLock()
+	defer this.RUnlock()
+
+	keys := list.New()
+	for k, v := range this.data {
+		if v.expiration.Before(*t) {
+			keys.PushBack(k)
+		}
+	}
+	return keys
+}
+
+func (this *Cache) deleteKeys(keys *list.List) {
+	this.Lock()
+	defer this.Unlock()
+
+	for i := keys.Front(); i != nil; i = i.Next() {
+		delete(this.data, i.Value.(string))
+	}
+}
+
+func (this *Cache) removeExpired() {
+	now := time.Now()
+	keys := this.keysOlderThan(&now)
+	if keys.Len() > 0 {
+		go this.deleteKeys(keys)
+	}
+}
+
+func (this *Cache) Eviction() {
+	this.removeExpired()
+}
+
 func (this *Cache) Get(key string) interface{} {
 	this.RLock()
 	defer this.RUnlock()
+
 	value, ok := this.data[key]
 	if !ok {
 		log.Println("Not found", key)
 		return nil
 	}
-	return value
-}
-
-func (this *Cache) riseEvent(t EventType, keys ...string) {
-	timestamp := time.Now()
-	go func() {
-		for _, key := range keys {
-			this.event <- &Event{t, key, timestamp}
-		}
-	}()
+	return value.Value
 }
 
 func (this *Cache) Set(key string, value interface{}) interface{} {
 	this.Lock()
 	defer this.Unlock()
-	defer this.riseEvent(SET, key)
-	this.data[key] = value
+
+	this.data[key] = &CacheValue{value, time.Now().Add(this.ttl)}
 	return value
 }
 
 func (this *Cache) Delete(keys ...string) {
 	this.Lock()
 	defer this.Unlock()
-	defer this.riseEvent(DEL, keys...)
+
 	for _, key := range keys {
 		delete(this.data, key)
 	}
@@ -158,11 +142,16 @@ func main() {
 	cache.Set("x", []int{1, 2, 3})
 	cache.Set("y", "[1 2 3]")
 
+	fmt.Println("Cache TTL 5s: with x, y")
 	fmt.Println(cache)
 
 	cache.Delete("y")
 
+	fmt.Println("Cache TTL 5s: y deleted")
 	fmt.Println(cache)
 
 	time.Sleep(10 * time.Second)
+
+	fmt.Println("Cache TTL 5s: after 10s")
+	fmt.Println(cache)
 }
