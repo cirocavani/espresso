@@ -24,19 +24,14 @@ func (this *CacheEntry) Before(t *time.Time) bool {
 
 type Cache struct {
 	sync.RWMutex
-	data    map[string]*list.Element
-	entries *list.List
-
-	ttl     time.Duration
-	maxSize int
+	data map[string]*CacheEntry
+	ttl  time.Duration
 }
 
-func NewCache(purge, ttl time.Duration, maxSize int) *Cache {
+func NewCache(purge, ttl time.Duration) *Cache {
 	cache := &Cache{
-		data:    make(map[string]*list.Element),
-		entries: list.New(),
-		ttl:     ttl,
-		maxSize: maxSize,
+		data: make(map[string]*CacheEntry),
+		ttl:  ttl,
 	}
 
 	eviction := func() {
@@ -72,93 +67,78 @@ func (this *Cache) String() string {
 	return out
 }
 
-func (this *Cache) removeExpired() {
-	now := time.Now()
-	for i := this.entries.Front(); i != nil; {
-		next := i.Next()
-		value := i.Value.(*CacheEntry)
-		if value.Before(&now) {
-			delete(this.data, *value.Key)
-			this.entries.Remove(i)
+func (this *Cache) entriesOlderThan(t *time.Time) *list.List {
+	this.RLock()
+	defer this.RUnlock()
+
+	entries := list.New()
+	for _, v := range this.data {
+		if v.Before(t) {
+			entries.PushBack(v)
 		}
-		i = next
+	}
+	return entries
+}
+
+func (this *Cache) deleteEntries(entries *list.List) {
+	this.Lock()
+	defer this.Unlock()
+
+	for i := entries.Front(); i != nil; i = i.Next() {
+		vi := i.Value.(*CacheEntry)
+		if v, ok := this.data[*vi.Key]; ok && vi == v {
+			delete(this.data, *vi.Key)
+		}
 	}
 }
 
-func (this *Cache) removeOverflow() {
-	over := this.entries.Len() - this.maxSize
-	if over <= 0 {
-		return
-	}
-	for n := 0; n < over; n++ {
-		i := this.entries.Front()
-		value := i.Value.(*CacheEntry)
-		delete(this.data, *value.Key)
-		this.entries.Remove(i)
+func (this *Cache) removeExpired() {
+	now := time.Now()
+	entries := this.entriesOlderThan(&now)
+	if entries.Len() > 0 {
+		go this.deleteEntries(entries)
 	}
 }
 
 func (this *Cache) Eviction() {
-	this.Lock()
-	defer this.Unlock()
-
 	this.removeExpired()
-	this.removeOverflow()
 }
 
 func (this *Cache) Get(key string) interface{} {
 	this.RLock()
 	defer this.RUnlock()
 
-	i, ok := this.data[key]
+	value, ok := this.data[key]
 	if !ok {
 		log.Println("Not found", key)
 		return nil
 	}
-	value := i.Value.(*CacheEntry)
 	return value.Value
-}
-
-func (this *Cache) release(key string) {
-	if i, ok := this.data[key]; ok {
-		delete(this.data, key)
-		this.entries.Remove(i)
-	}
 }
 
 func (this *Cache) SetExpiration(key string, value interface{}, ttl time.Duration) {
 	this.Lock()
 	defer this.Unlock()
 
-	this.release(key)
-
 	expiration := time.Now().Add(ttl)
-	entry := &CacheEntry{
+	this.data[key] = &CacheEntry{
 		&key,
 		value,
 		&expiration,
 	}
-	this.data[key] = this.entries.PushBack(entry)
 }
 
 func (this *Cache) Set(key string, value interface{}) {
 	this.SetExpiration(key, value, this.ttl)
 }
 
-func (this *Cache) Release(keys ...string) {
+func (this *Cache) Delete(keys ...string) {
 	this.Lock()
 	defer this.Unlock()
 
 	for _, key := range keys {
-		this.release(key)
+		delete(this.data, key)
 	}
-}
-
-func (this *Cache) Size() int {
-	this.RLock()
-	defer this.RUnlock()
-
-	return this.entries.Len()
 }
 
 func main() {
@@ -171,16 +151,15 @@ func main() {
 
 	purge := 1 * time.Second
 	ttl := 5 * time.Second
-	size := 10
 
-	cache := NewCache(purge, ttl, size)
+	cache := NewCache(purge, ttl)
 	cache.Set("x", []int{1, 2, 3})
 	cache.Set("y", "[1 2 3]")
 
 	fmt.Println("Cache TTL 5s: with x, y")
 	fmt.Println(cache)
 
-	cache.Release("y")
+	cache.Delete("y")
 
 	fmt.Println("Cache TTL 5s: y deleted")
 	fmt.Println(cache)
@@ -189,15 +168,4 @@ func main() {
 
 	fmt.Println("Cache TTL 5s: after 10s")
 	fmt.Println(cache)
-
-	v := "some very complex data"
-	for _, k := range []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"} {
-		cache.SetExpiration(k, &v, 10*time.Hour)
-	}
-
-	fmt.Println("Cache Size:", cache.Size())
-
-	time.Sleep(10 * time.Second)
-
-	fmt.Println("Cache Size after 10s:", cache.Size())
 }
