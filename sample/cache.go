@@ -15,7 +15,7 @@ var optThreads = flag.Int("threads", runtime.NumCPU(), "Number of system threads
 type CacheEntry struct {
 	Key        *string
 	Value      interface{}
-	expiration time.Time
+	expiration *time.Time
 }
 
 func (this *CacheEntry) Before(t *time.Time) bool {
@@ -29,7 +29,7 @@ type Cache struct {
 	maxSize int
 }
 
-func NewCache(ttl time.Duration, maxSize int) *Cache {
+func NewCache(purge, ttl time.Duration, maxSize int) *Cache {
 	cache := &Cache{
 		data:    make(map[string]*CacheEntry),
 		ttl:     ttl,
@@ -37,7 +37,7 @@ func NewCache(ttl time.Duration, maxSize int) *Cache {
 	}
 
 	eviction := func() {
-		ticker := time.NewTicker(ttl)
+		ticker := time.NewTicker(purge)
 
 		for {
 			<-ticker.C
@@ -118,12 +118,20 @@ func (this *Cache) Get(key string) interface{} {
 	return value.Value
 }
 
-func (this *Cache) Set(key string, value interface{}) interface{} {
+func (this *Cache) SetExpiration(key string, value interface{}, ttl time.Duration) {
 	this.Lock()
 	defer this.Unlock()
 
-	this.data[key] = &CacheEntry{&key, value, time.Now().Add(this.ttl)}
-	return value
+	expiration := time.Now().Add(ttl)
+	this.data[key] = &CacheEntry{
+		&key,
+		value,
+		&expiration,
+	}
+}
+
+func (this *Cache) Set(key string, value interface{}) {
+	this.SetExpiration(key, value, this.ttl)
 }
 
 func (this *Cache) Delete(keys ...string) {
@@ -143,10 +151,11 @@ func main() {
 	fmt.Println("Threads:", *optThreads)
 	runtime.GOMAXPROCS(*optThreads)
 
+	purge := 5 * time.Second
 	ttl := 5 * time.Second
 	size := 10
 
-	cache := NewCache(ttl, size)
+	cache := NewCache(purge, ttl, size)
 	cache.Set("x", []int{1, 2, 3})
 	cache.Set("y", "[1 2 3]")
 
