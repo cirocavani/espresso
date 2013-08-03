@@ -4,7 +4,6 @@ import (
 	"container/list"
 	"flag"
 	"fmt"
-	"log"
 	"runtime"
 	"sync"
 	"time"
@@ -115,17 +114,16 @@ func (this *Cache) Eviction() {
 	this.removeOverflow()
 }
 
-func (this *Cache) Get(key string) interface{} {
+func (this *Cache) Get(key string) (interface{}, bool) {
 	this.RLock()
 	defer this.RUnlock()
 
 	i, ok := this.data[key]
 	if !ok {
-		log.Println("Not found", key)
-		return nil
+		return nil, false
 	}
 	value := i.Value.(*CacheEntry)
-	return value.Value
+	return value.Value, true
 }
 
 func (this *Cache) release(key string) {

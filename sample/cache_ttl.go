@@ -4,7 +4,6 @@ import (
 	"container/list"
 	"flag"
 	"fmt"
-	"log"
 	"runtime"
 	"sync"
 	"time"
@@ -104,16 +103,15 @@ func (this *Cache) Eviction() {
 	this.removeExpired()
 }
 
-func (this *Cache) Get(key string) interface{} {
+func (this *Cache) Get(key string) (interface{}, bool) {
 	this.RLock()
 	defer this.RUnlock()
 
 	value, ok := this.data[key]
 	if !ok {
-		log.Println("Not found", key)
-		return nil
+		return nil, false
 	}
-	return value.Value
+	return value.Value, true
 }
 
 func (this *Cache) SetExpiration(key string, value interface{}, ttl time.Duration) {
