@@ -72,29 +72,34 @@ func (this *Cache) String() string {
 	return out
 }
 
+func (this *Cache) Size() int {
+	this.RLock()
+	defer this.RUnlock()
+
+	return this.entries.Len()
+}
+
+func (this *Cache) removeEntry(i *list.Element) {
+	value := i.Value.(*CacheEntry)
+	delete(this.data, *value.Key)
+	this.entries.Remove(i)
+}
+
 func (this *Cache) removeExpired() {
 	now := time.Now()
 	for i := this.entries.Front(); i != nil; {
 		next := i.Next()
-		value := i.Value.(*CacheEntry)
-		if value.Before(&now) {
-			delete(this.data, *value.Key)
-			this.entries.Remove(i)
+		if value := i.Value.(*CacheEntry); value.Before(&now) {
+			this.removeEntry(i)
 		}
 		i = next
 	}
 }
 
 func (this *Cache) removeOverflow() {
-	over := this.entries.Len() - this.maxSize
-	if over <= 0 {
-		return
-	}
-	for n := 0; n < over; n++ {
+	for over := this.entries.Len() - this.maxSize; over > 0; over-- {
 		i := this.entries.Front()
-		value := i.Value.(*CacheEntry)
-		delete(this.data, *value.Key)
-		this.entries.Remove(i)
+		this.removeEntry(i)
 	}
 }
 
@@ -126,6 +131,10 @@ func (this *Cache) release(key string) {
 	}
 }
 
+func (this *Cache) Set(key string, value interface{}) {
+	this.SetExpiration(key, value, this.ttl)
+}
+
 func (this *Cache) SetExpiration(key string, value interface{}, ttl time.Duration) {
 	this.Lock()
 	defer this.Unlock()
@@ -141,10 +150,6 @@ func (this *Cache) SetExpiration(key string, value interface{}, ttl time.Duratio
 	this.data[key] = this.entries.PushBack(entry)
 }
 
-func (this *Cache) Set(key string, value interface{}) {
-	this.SetExpiration(key, value, this.ttl)
-}
-
 func (this *Cache) Release(keys ...string) {
 	this.Lock()
 	defer this.Unlock()
@@ -152,13 +157,6 @@ func (this *Cache) Release(keys ...string) {
 	for _, key := range keys {
 		this.release(key)
 	}
-}
-
-func (this *Cache) Size() int {
-	this.RLock()
-	defer this.RUnlock()
-
-	return this.entries.Len()
 }
 
 func main() {
