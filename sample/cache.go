@@ -72,11 +72,15 @@ func (this *Cache) String() string {
 	return out
 }
 
+func (this *Cache) size() int {
+	return this.entries.Len()
+}
+
 func (this *Cache) Size() int {
 	this.RLock()
 	defer this.RUnlock()
 
-	return this.entries.Len()
+	return this.size()
 }
 
 func (this *Cache) removeEntry(i *list.Element) {
@@ -97,7 +101,7 @@ func (this *Cache) removeExpired() {
 }
 
 func (this *Cache) removeOverflow() {
-	for over := this.entries.Len() - this.maxSize; over > 0; over-- {
+	for over := this.size() - this.maxSize; over > 0; over-- {
 		i := this.entries.Front()
 		this.removeEntry(i)
 	}

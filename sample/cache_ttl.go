@@ -132,7 +132,7 @@ func (this *Cache) Set(key string, value interface{}) {
 	this.SetExpiration(key, value, this.ttl)
 }
 
-func (this *Cache) Delete(keys ...string) {
+func (this *Cache) Release(keys ...string) {
 	this.Lock()
 	defer this.Unlock()
 
@@ -159,7 +159,7 @@ func main() {
 	fmt.Println("Cache TTL 5s: with x, y")
 	fmt.Println(cache)
 
-	cache.Delete("y")
+	cache.Release("y")
 
 	fmt.Println("Cache TTL 5s: y deleted")
 	fmt.Println(cache)
