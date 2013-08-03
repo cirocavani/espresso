@@ -59,7 +59,7 @@ func (this *Cache) String() string {
 		} else {
 			out += ","
 		}
-		out += fmt.Sprintf(`"%s"=%#v`, k, v)
+		out += fmt.Sprintf(`"%s"=%#v`, k, v.Value)
 	}
 	out += "}"
 

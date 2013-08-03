@@ -23,8 +23,8 @@ func (this *CacheEntry) Before(t *time.Time) bool {
 
 type Cache struct {
 	sync.RWMutex
-	data    map[string]*list.Element
 	entries *list.List
+	index   map[string]*list.Element
 
 	ttl     time.Duration
 	maxSize int
@@ -32,8 +32,8 @@ type Cache struct {
 
 func NewCache(purge, ttl time.Duration, maxSize int) *Cache {
 	cache := &Cache{
-		data:    make(map[string]*list.Element),
 		entries: list.New(),
+		index:   make(map[string]*list.Element),
 		ttl:     ttl,
 		maxSize: maxSize,
 	}
@@ -58,13 +58,14 @@ func (this *Cache) String() string {
 
 	out := "{"
 	first := true
-	for k, v := range this.data {
+	for i := this.entries.Front(); i != nil; i = i.Next() {
 		if first {
 			first = false
 		} else {
 			out += ","
 		}
-		out += fmt.Sprintf(`"%s"=%#v`, k, v)
+		entry := i.Value.(*CacheEntry)
+		out += fmt.Sprintf(`"%s"=%#v`, *entry.Key, entry.Value)
 	}
 	out += "}"
 
@@ -83,9 +84,9 @@ func (this *Cache) Size() int {
 }
 
 func (this *Cache) removeEntry(i *list.Element) {
-	value := i.Value.(*CacheEntry)
-	delete(this.data, *value.Key)
+	entry := i.Value.(*CacheEntry)
 	this.entries.Remove(i)
+	delete(this.index, *entry.Key)
 }
 
 func (this *Cache) removeExpired() {
@@ -118,18 +119,18 @@ func (this *Cache) Get(key string) (interface{}, bool) {
 	this.RLock()
 	defer this.RUnlock()
 
-	i, ok := this.data[key]
+	i, ok := this.index[key]
 	if !ok {
 		return nil, false
 	}
-	value := i.Value.(*CacheEntry)
-	return value.Value, true
+	entry := i.Value.(*CacheEntry)
+	return entry.Value, true
 }
 
 func (this *Cache) release(key string) {
-	if i, ok := this.data[key]; ok {
-		delete(this.data, key)
+	if i, ok := this.index[key]; ok {
 		this.entries.Remove(i)
+		delete(this.index, key)
 	}
 }
 
@@ -149,7 +150,7 @@ func (this *Cache) SetExpiration(key string, value interface{}, ttl time.Duratio
 		value,
 		&expiration,
 	}
-	this.data[key] = this.entries.PushBack(entry)
+	this.index[key] = this.entries.PushBack(entry)
 }
 
 func (this *Cache) Release(keys ...string) {
