@@ -89,7 +89,7 @@ func (this *Cache) removeExpired() {
 	now := time.Now()
 	for i := this.entries.Front(); i != nil; {
 		next := i.Next()
-		if value := i.Value.(*CacheEntry); value.Before(&now) {
+		if i.Value.(*CacheEntry).Before(&now) {
 			this.removeEntry(i)
 		}
 		i = next
