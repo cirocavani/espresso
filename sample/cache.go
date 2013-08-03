@@ -151,7 +151,7 @@ func main() {
 	fmt.Println("Threads:", *optThreads)
 	runtime.GOMAXPROCS(*optThreads)
 
-	purge := 5 * time.Second
+	purge := 1 * time.Second
 	ttl := 5 * time.Second
 	size := 10
 
