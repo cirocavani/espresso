@@ -12,21 +12,26 @@ import (
 
 var optThreads = flag.Int("threads", runtime.NumCPU(), "Number of system threads")
 
-type CacheValue struct {
+type CacheEntry struct {
+	Key        *string
 	Value      interface{}
 	expiration time.Time
 }
 
+func (this *CacheEntry) Before(t *time.Time) bool {
+	return this.expiration.Before(*t)
+}
+
 type Cache struct {
 	sync.RWMutex
-	data    map[string]*CacheValue
+	data    map[string]*CacheEntry
 	ttl     time.Duration
 	maxSize int
 }
 
 func NewCache(ttl time.Duration, maxSize int) *Cache {
 	cache := &Cache{
-		data:    make(map[string]*CacheValue),
+		data:    make(map[string]*CacheEntry),
 		ttl:     ttl,
 		maxSize: maxSize,
 	}
@@ -64,33 +69,36 @@ func (this *Cache) String() string {
 	return out
 }
 
-func (this *Cache) keysOlderThan(t *time.Time) *list.List {
+func (this *Cache) entriesOlderThan(t *time.Time) *list.List {
 	this.RLock()
 	defer this.RUnlock()
 
-	keys := list.New()
-	for k, v := range this.data {
-		if v.expiration.Before(*t) {
-			keys.PushBack(k)
+	entries := list.New()
+	for _, v := range this.data {
+		if v.Before(t) {
+			entries.PushBack(v)
 		}
 	}
-	return keys
+	return entries
 }
 
-func (this *Cache) deleteKeys(keys *list.List) {
+func (this *Cache) deleteEntries(entries *list.List) {
 	this.Lock()
 	defer this.Unlock()
 
-	for i := keys.Front(); i != nil; i = i.Next() {
-		delete(this.data, i.Value.(string))
+	for i := entries.Front(); i != nil; i = i.Next() {
+		vi := i.Value.(*CacheEntry)
+		if v, ok := this.data[*vi.Key]; ok && vi == v {
+			delete(this.data, *vi.Key)
+		}
 	}
 }
 
 func (this *Cache) removeExpired() {
 	now := time.Now()
-	keys := this.keysOlderThan(&now)
-	if keys.Len() > 0 {
-		go this.deleteKeys(keys)
+	entries := this.entriesOlderThan(&now)
+	if entries.Len() > 0 {
+		go this.deleteEntries(entries)
 	}
 }
 
@@ -114,7 +122,7 @@ func (this *Cache) Set(key string, value interface{}) interface{} {
 	this.Lock()
 	defer this.Unlock()
 
-	this.data[key] = &CacheValue{value, time.Now().Add(this.ttl)}
+	this.data[key] = &CacheEntry{&key, value, time.Now().Add(this.ttl)}
 	return value
 }
 
