@@ -1,16 +1,16 @@
 Redis Server:
 
-      wget http://redis.googlecode.com/files/redis-2.6.14.tar.gz
-      tar xzf redis-2.6.14.tar.gz
-      cd redis-2.6.14
-      make
-      
-      src/redis-server
+	wget http://redis.googlecode.com/files/redis-2.6.14.tar.gz
+	tar xzf redis-2.6.14.tar.gz
+	cd redis-2.6.14
+	make
+	
+	src/redis-server
 
 Redis Client:
 
-      export GOPATH=<SOURCE FOLDER>/espresso/lib
-      go get github.com/hoisie/redis
+	export GOPATH=<SOURCE FOLDER>/espresso/lib
+	go get github.com/hoisie/redis
 
 Output:
 
