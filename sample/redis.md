@@ -9,6 +9,8 @@ Redis Server:
 
 Redis Client:
 
+http://godoc.org/github.com/hoisie/redis
+
 	export GOPATH=<SOURCE FOLDER>/espresso/lib
 	go get github.com/hoisie/redis
 
