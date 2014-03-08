@@ -1,2 +1,5 @@
-lib/pkg
-lib/src
+pkg
+bin
+src/labix.org
+src/github.com
+src/code.google.com
